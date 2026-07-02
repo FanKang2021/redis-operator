@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/go-cmp/cmp"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -106,6 +108,13 @@ func (d *DeploymentService) CreateOrUpdateDeployment(namespace string, deploymen
 	// namespace is our spec(https://github.com/kubernetes/community/blob/master/contributors/devel/api-conventions.md#concurrency-control-and-consistency),
 	// we will replace the current namespace state.
 	deployment.ResourceVersion = storedDeployment.ResourceVersion
+
+	if cmp.Equal(storedDeployment.Spec, deployment.Spec) {
+		d.logger.WithField("namespace", namespace).WithField("deployment", deployment.Name).
+			Debugf("Deployment spec unchanged, skipping update to prevent Generation growth")
+		return nil
+	}
+
 	return d.UpdateDeployment(namespace, deployment)
 }
 

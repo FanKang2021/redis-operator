@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/go-cmp/cmp"
+
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/spotahome/redis-operator/operator/redisfailover/util"
@@ -171,6 +173,13 @@ func (s *StatefulSetService) CreateOrUpdateStatefulSet(namespace string, statefu
 	// set stored.volumeClaimTemplates
 	statefulSet.Spec.VolumeClaimTemplates = storedStatefulSet.Spec.VolumeClaimTemplates
 	statefulSet.Annotations = util.MergeAnnotations(storedStatefulSet.Annotations, statefulSet.Annotations)
+
+	if cmp.Equal(storedStatefulSet.Spec, statefulSet.Spec) && cmp.Equal(storedStatefulSet.Annotations, statefulSet.Annotations) {
+		s.logger.WithField("namespace", namespace).WithField("statefulSet", statefulSet.Name).
+			Debugf("StatefulSet spec and annotations unchanged, skipping update to prevent Generation growth")
+		return nil
+	}
+
 	return s.UpdateStatefulSet(namespace, statefulSet)
 }
 
