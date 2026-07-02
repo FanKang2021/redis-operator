@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -174,7 +175,21 @@ func (s *StatefulSetService) CreateOrUpdateStatefulSet(namespace string, statefu
 	statefulSet.Spec.VolumeClaimTemplates = storedStatefulSet.Spec.VolumeClaimTemplates
 	statefulSet.Annotations = util.MergeAnnotations(storedStatefulSet.Annotations, statefulSet.Annotations)
 
-	if cmp.Equal(storedStatefulSet.Spec, statefulSet.Spec) && cmp.Equal(storedStatefulSet.Annotations, statefulSet.Annotations) {
+	// Debug: log the diff to identify which fields are causing mismatch
+	specDiff := cmp.Diff(storedStatefulSet.Spec, statefulSet.Spec,
+		cmpopts.IgnoreFields(appsv1.StatefulSetSpec{}, "UpdateStrategy", "RevisionHistoryLimit", "MinReadySeconds", "PersistentVolumeClaimRetentionPolicy"),
+		cmpopts.IgnoreFields(corev1.PodSpec{}, "SchedulerName", "DNSPolicy", "SecurityContext", "TerminationGracePeriodSeconds", "RestartPolicy"),
+		cmpopts.IgnoreFields(corev1.Container{}, "ImagePullPolicy", "TerminationMessagePath", "TerminationMessagePolicy"),
+		cmpopts.IgnoreFields(corev1.ConfigMapVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.Probe{}, "SuccessThreshold", "FailureThreshold", "PeriodSeconds"),
+		cmpopts.EquateEmpty())
+	annotationsDiff := cmp.Diff(storedStatefulSet.Annotations, statefulSet.Annotations)
+	if specDiff != "" || annotationsDiff != "" {
+		s.logger.WithField("namespace", namespace).WithField("statefulSet", statefulSet.Name).
+			Infof("StatefulSet spec diff (triggering update): %s", specDiff)
+		s.logger.WithField("namespace", namespace).WithField("statefulSet", statefulSet.Name).
+			Infof("StatefulSet annotations diff (triggering update): %s", annotationsDiff)
+	} else {
 		s.logger.WithField("namespace", namespace).WithField("statefulSet", statefulSet.Name).
 			Debugf("StatefulSet spec and annotations unchanged, skipping update to prevent Generation growth")
 		return nil

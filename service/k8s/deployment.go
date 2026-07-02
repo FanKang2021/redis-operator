@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -109,7 +110,17 @@ func (d *DeploymentService) CreateOrUpdateDeployment(namespace string, deploymen
 	// we will replace the current namespace state.
 	deployment.ResourceVersion = storedDeployment.ResourceVersion
 
-	if cmp.Equal(storedDeployment.Spec, deployment.Spec) {
+	// Debug: log the diff to identify which fields are causing mismatch
+	if diff := cmp.Diff(storedDeployment.Spec, deployment.Spec,
+		cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Strategy", "RevisionHistoryLimit", "ProgressDeadlineSeconds", "MinReadySeconds"),
+		cmpopts.IgnoreFields(corev1.PodSpec{}, "SchedulerName", "DNSPolicy", "SecurityContext", "TerminationGracePeriodSeconds", "RestartPolicy"),
+		cmpopts.IgnoreFields(corev1.Container{}, "ImagePullPolicy", "TerminationMessagePath", "TerminationMessagePolicy"),
+		cmpopts.IgnoreFields(corev1.ConfigMapVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.Probe{}, "SuccessThreshold", "FailureThreshold", "PeriodSeconds"),
+		cmpopts.EquateEmpty()); diff != "" {
+		d.logger.WithField("namespace", namespace).WithField("deployment", deployment.Name).
+			Infof("Deployment spec diff (triggering update): %s", diff)
+	} else {
 		d.logger.WithField("namespace", namespace).WithField("deployment", deployment.Name).
 			Debugf("Deployment spec unchanged, skipping update to prevent Generation growth")
 		return nil
