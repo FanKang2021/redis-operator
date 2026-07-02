@@ -15,3 +15,5 @@ Kubernetes API Server 在存储资源时会自动填充默认值（如 scheduler
 - 添加相同的导入和比较逻辑
 - 同时比较 spec 和 annotations，确保注解变更不会被跳过
 ### 忽略的字段
+### 验证修复
+watch -n 5 'kubectl get deployment rfs-redisfailover-persistent -n base -o jsonpath="{.metadata.generation}"'
